@@ -1,4 +1,4 @@
-/* 対称ゲーム CSS */
+/* 対称ゲーム CSS (Neon Ignite Ver.) */
 * {
     margin: 0;
     padding: 0;
@@ -7,35 +7,59 @@
 
 body {
     font-family: 'Comic Sans MS', cursive, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #8e2de2 0%, #4a00e0 100%);
     min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
     padding: 10px;
+    transition: background 0.5s ease;
+}
+
+/* 再生中のダークモード背景 */
+body.neon-mode {
+    background: radial-gradient(circle at center, #2a0030 0%, #000000 100%);
 }
 
 .game-container {
     background: rgba(255, 255, 255, 0.95);
     border-radius: 20px;
     padding: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     text-align: center;
     max-width: 600px;
     width: 100%;
+    transition: background 0.5s, box-shadow 0.5s;
+}
+
+/* 再生中のコンテナスタイル */
+body.neon-mode .game-container {
+    background: rgba(20, 20, 30, 0.9); /* 暗くする */
+    box-shadow: 0 0 50px rgba(255, 0, 204, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 h1 {
-    color: #4a4a4a;
-    font-size: 2.5em;
+    color: #333;
+    font-size: 2.2em;
     margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    transition: color 0.3s;
+}
+
+body.neon-mode h1 {
+    color: #fff;
+    text-shadow: 0 0 10px #ff00cc, 0 0 20px #ff00cc;
 }
 
 .instruction {
-    color: #666;
-    font-size: 1.2em;
+    color: #555;
+    font-size: 1.1em;
     margin-bottom: 20px;
+}
+
+body.neon-mode .instruction {
+    color: #ccc;
 }
 
 .controls {
@@ -52,48 +76,46 @@ button {
     border: none;
     padding: 12px 20px;
     border-radius: 25px;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: bold;
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+    white-space: nowrap;
 }
 
 button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5);
 }
 
 button:active {
-    transform: translateY(0);
+    transform: translateY(-1px);
 }
 
-#colorBtn {
-    background: linear-gradient(45deg, #4ecdc4, #44a08d);
-    box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+/* 再生ボタン */
+.play-btn {
+    background: linear-gradient(45deg, #ff00cc, #3333ff);
+    box-shadow: 0 4px 15px rgba(255, 0, 204, 0.4);
+    font-size: 16px;
+    padding: 12px 24px;
+    z-index: 10;
+}
+.play-btn:hover {
+    box-shadow: 0 8px 25px rgba(255, 0, 204, 0.6);
+}
+.play-btn.playing {
+    background: linear-gradient(45deg, #ff3300, #ffcc00);
+    animation: pulse-btn 0.5s infinite alternate; /* 速くする */
+}
+@keyframes pulse-btn {
+    0% { transform: scale(1); box-shadow: 0 0 10px #ff3300; }
+    100% { transform: scale(1.1); box-shadow: 0 0 30px #ffcc00; }
 }
 
-#colorBtn:hover {
-    box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
-}
-
-#modeBtn {
-    background: linear-gradient(45deg, #a8e6cf, #7fcdcd);
-    box-shadow: 0 4px 15px rgba(168, 230, 207, 0.3);
-}
-
-#modeBtn:hover {
-    box-shadow: 0 6px 20px rgba(168, 230, 207, 0.4);
-}
-
-#sizeBtn {
-    background: linear-gradient(45deg, #ffd93d, #ff6b6b);
-    box-shadow: 0 4px 15px rgba(255, 217, 61, 0.3);
-}
-
-#sizeBtn:hover {
-    box-shadow: 0 6px 20px rgba(255, 217, 61, 0.4);
-}
+#colorBtn { background: linear-gradient(45deg, #4ecdc4, #44a08d); }
+#modeBtn { background: linear-gradient(45deg, #a8e6cf, #7fcdcd); }
+#sizeBtn { background: linear-gradient(45deg, #ffd93d, #ff6b6b); }
 
 .canvas-container {
     background: #ffffff;
@@ -101,6 +123,15 @@ button:active {
     padding: 10px;
     box-shadow: inset 0 4px 15px rgba(0, 0, 0, 0.1);
     margin-bottom: 20px;
+    overflow: hidden;
+    position: relative;
+    transition: background 0.3s;
+}
+
+/* 再生中はキャンバス背景を黒くして光を目立たせる */
+body.neon-mode .canvas-container {
+    background: #000000;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
 }
 
 #gameCanvas {
@@ -110,74 +141,53 @@ button:active {
     background: #ffffff;
     display: block;
     margin: 0 auto;
+    transition: filter 0.1s ease; /* 反応速度を上げる */
+}
+
+/* 再生中はキャンバス自体は透明にしてコンテナの黒を見せる */
+body.neon-mode #gameCanvas {
+    background: transparent;
+    border-color: #333;
+}
+
+#gameCanvas.beat-hit {
+    filter: brightness(1.5) contrast(1.2);
+    transform: scale(1.02);
 }
 
 .info {
     display: flex;
-    justify-content: space-around;
+    justify-content: center;
     flex-wrap: wrap;
     gap: 20px;
 }
 
 .info p {
     background: rgba(255, 255, 255, 0.8);
-    padding: 10px 15px;
+    padding: 8px 15px;
     border-radius: 20px;
     color: #4a4a4a;
     font-weight: bold;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-#currentColor {
-    font-size: 1.5em;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
 /* スマホ対応 */
 @media (max-width: 768px) {
-    .game-container {
-        padding: 15px;
-        margin: 5px;
-    }
-    
-    h1 {
-        font-size: 2em;
-    }
-    
-    .instruction {
-        font-size: 1em;
-    }
-    
-    button {
-        padding: 10px 15px;
-        font-size: 14px;
-    }
-    
-    .controls {
-        gap: 8px;
-    }
-    
-    .info {
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-    }
+    .game-container { padding: 15px; margin: 5px; }
+    h1 { font-size: 1.8em; }
+    .instruction { font-size: 1em; }
+    button { padding: 10px 15px; font-size: 14px; }
+    .controls { gap: 8px; }
+    .info p { font-size: 0.9em; padding: 6px 12px; }
 }
 
 @media (max-width: 480px) {
-    h1 {
-        font-size: 1.8em;
-    }
-    
-    .instruction {
-        font-size: 0.9em;
-    }
-    
-    button {
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-    
-    .controls {
-        gap: 5px;
-    }
+    h1 { font-size: 1.5em; }
+    .instruction { font-size: 0.9em; }
+    button, .play-btn { padding: 8px 12px; font-size: 12px; flex-grow: 1; text-align: center; }
+    .controls { gap: 5px; }
+    .info { gap: 10px; }
 }
