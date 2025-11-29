@@ -1,4 +1,4 @@
-// 対称ゲーム JavaScript（Neon Ignite オーディオリアクティブ版）
+// 対称ゲーム JavaScript（Neon Ignite オーディオリアクティブ版 + 拡張機能）
 
 // ▼▼▼ エフェクト用パーティクル（発光仕様） ▼▼▼
 class Particle {
@@ -6,7 +6,6 @@ class Particle {
         this.x = x;
         this.y = y;
         this.size = Math.random() * 10 + 2;
-        // 爆発力を強化
         const angle = Math.random() * Math.PI * 2;
         const speed = Math.random() * 15 * speedMultiplier;
         this.speedX = Math.cos(angle) * speed;
@@ -19,7 +18,7 @@ class Particle {
     update() {
         this.x += this.speedX;
         this.y += this.speedY;
-        this.speedX *= 0.95; // 摩擦
+        this.speedX *= 0.95;
         this.speedY *= 0.95;
         this.life -= this.decay;
     }
@@ -27,7 +26,6 @@ class Particle {
         ctx.save();
         ctx.globalAlpha = this.life;
         ctx.fillStyle = this.color;
-        // パーティクルも光らせる
         ctx.shadowBlur = 10;
         ctx.shadowColor = this.color;
         ctx.beginPath();
@@ -43,18 +41,30 @@ class SymmetryGame {
         this.ctx = this.canvas.getContext('2d');
         this.isDrawing = false;
         
-        // ネオンカラーパレット
+        // 基本設定
         this.colors = ['#ff0055', '#00ffcc', '#0099ff', '#ccff00', '#ffcc00', '#ff00cc', '#ffffff'];
         this.colorEmojis = ['🔴', '🔵', '💧', '🟢', '🟡', '🟣', '⚪'];
         this.currentColorIndex = 0;
-        this.brushSizes = [3, 6, 12]; // 少し太くした
+        
+        this.brushSizes = [3, 8, 20]; 
         this.brushSizeNames = ['小', '中', '大'];
         this.currentSizeIndex = 1;
-        this.symmetryModes = [2, 4, 6, 8, 12]; // 12方向を追加
+        
+        this.symmetryModes = [2, 3, 4, 6, 8, 12]; // 3角形を作るために3を追加
         this.currentSymmetryIndex = 0;
+
+        // ▼ 新機能：ブラシスタイルとツール ▼
+        this.brushStyles = ['neon', 'spray', 'ribbon'];
+        this.brushStyleNames = ['通常', 'スプレー', 'リボン'];
+        this.currentStyleIndex = 0;
+
+        this.drawTools = ['freehand', 'polygon'];
+        this.drawToolNames = ['フリー', '多角形'];
+        this.currentToolIndex = 0;
         
         this.drawingHistory = [];
         this.currentStrokePoints = [];
+        this.startPos = {x: 0, y: 0}; // シェイプ描画の始点用
         
         this.isPlaying = false;
         this.animationId = null;
@@ -62,13 +72,11 @@ class SymmetryGame {
         this.audioElement = document.getElementById('bgm');
         this.audioElement.volume = 0.6;
 
-        // オーディオ解析用
         this.audioCtx = null;
         this.analyser = null;
         this.dataArray = null;
         this.source = null;
 
-        // アニメーションパラメータ
         this.baseRotation = 0;
         this.beatScale = 1;
         this.particles = [];
@@ -77,25 +85,21 @@ class SymmetryGame {
         this.bindEvents();
         this.updateUI();
         
-        // 描画音用（簡易）
         this.drawAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
     
     initCanvas() {
         const container = document.querySelector('.canvas-container');
-        const maxWidth = Math.min(600, container.clientWidth - 20); // 少し大きく
+        const maxWidth = Math.min(600, container.clientWidth - 20);
         const maxHeight = Math.min(600, window.innerHeight * 0.6);
         this.canvas.width = maxWidth;
         this.canvas.height = maxHeight;
         
-        // デフォルト背景
         this.ctx.fillStyle = '#ffffff';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         this.centerX = this.canvas.width / 2;
         this.centerY = this.canvas.height / 2;
-        this.ctx.lineCap = 'round';
-        this.ctx.lineJoin = 'round';
         
         if (this.drawingHistory.length > 0 && !this.isPlaying) {
              this.redrawHistory();
@@ -107,6 +111,10 @@ class SymmetryGame {
         document.getElementById('colorBtn').addEventListener('click', () => this.changeColor());
         document.getElementById('modeBtn').addEventListener('click', () => this.changeSymmetryMode());
         document.getElementById('sizeBtn').addEventListener('click', () => this.changeBrushSize());
+        
+        // 新しいボタンイベント
+        document.getElementById('styleBtn').addEventListener('click', () => this.changeBrushStyle());
+        document.getElementById('toolBtn').addEventListener('click', () => this.changeDrawTool());
         
         this.canvas.addEventListener('mousedown', (e) => this.startDrawing(e));
         this.canvas.addEventListener('mousemove', (e) => this.draw(e));
@@ -123,18 +131,14 @@ class SymmetryGame {
         this.audioElement.addEventListener('ended', () => { if (this.isPlaying) this.toggleAnimation(); });
     }
 
-    // ▼▼▼ オーディオ解析のセットアップ ▼▼▼
     setupAudioAnalyzer() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             this.analyser = this.audioCtx.createAnalyser();
-            this.analyser.fftSize = 256; // 解像度
-            
-            // MediaElementSourceを作成して接続
+            this.analyser.fftSize = 256;
             this.source = this.audioCtx.createMediaElementSource(this.audioElement);
             this.source.connect(this.analyser);
-            this.analyser.connect(this.audioCtx.destination); // スピーカーへ
-            
+            this.analyser.connect(this.audioCtx.destination);
             this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
         }
         if (this.audioCtx.state === 'suspended') {
@@ -146,22 +150,19 @@ class SymmetryGame {
         this.isPlaying = !this.isPlaying;
         
         if (this.isPlaying) {
-            this.setupAudioAnalyzer(); // 再生時にセットアップ
-            
+            this.setupAudioAnalyzer();
             this.playBtn.textContent = '■ STOP';
             this.playBtn.classList.add('playing');
-            document.body.classList.add('neon-mode'); // ダークモードへ
+            document.body.classList.add('neon-mode');
             
             this.audioElement.currentTime = 0;
             this.audioElement.play().catch(e => console.log("Audio play failed:", e));
-            
             this.animate();
         } else {
             this.playBtn.textContent = '▶ MUSIC START';
             this.playBtn.classList.remove('playing');
             document.body.classList.remove('neon-mode');
             this.canvas.classList.remove('beat-hit');
-            
             this.audioElement.pause();
             cancelAnimationFrame(this.animationId);
             
@@ -175,43 +176,32 @@ class SymmetryGame {
 
     animate() {
         if (!this.isPlaying) return;
-        
-        // 周波数データの取得
         this.analyser.getByteFrequencyData(this.dataArray);
         
-        // 低音域（バスドラム）の平均音量を取得 (インデックス 0-10あたり)
         let bassSum = 0;
         for(let i=0; i<10; i++) bassSum += this.dataArray[i];
-        const bassLevel = bassSum / 10; // 0-255
+        const bassLevel = bassSum / 10;
         
-        // 中高域（スネア・メロディ）の平均
         let midSum = 0;
         for(let i=20; i<100; i++) midSum += this.dataArray[i];
         const midLevel = midSum / 80;
 
-        // ビートに合わせたスケール計算 (低音が強いと大きく揺れる)
         const scaleEffect = (bassLevel / 255) * 0.4; 
         this.beatScale = 1.0 + scaleEffect;
-
-        // 回転速度もエネルギーに比例
         this.baseRotation += 0.002 + (midLevel / 255) * 0.02;
 
-        // 背景色の動的変更（激しいときだけ）
         if (bassLevel > 200) {
             document.body.style.background = `radial-gradient(circle, #4a00e0, #000)`;
-            this.canvas.classList.add('beat-hit'); // CSSフィルタ発動
+            this.canvas.classList.add('beat-hit');
         } else {
             this.canvas.classList.remove('beat-hit');
         }
 
-        // キャンバスリセット（黒背景・残像効果）
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // 残像を残すために半透明の黒で塗りつぶす
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // 描画
         this.drawStoredPaths(bassLevel, midLevel);
 
-        // パーティクル生成（高音が強いとき、または定期的に）
         if (midLevel > 150 || Math.random() < 0.1) {
              const pCount = Math.floor(midLevel / 40);
              for(let i=0; i<pCount; i++) {
@@ -219,7 +209,6 @@ class SymmetryGame {
              }
         }
         
-        // パーティクル更新
         for (let i = this.particles.length - 1; i >= 0; i--) {
             this.particles[i].update();
             this.particles[i].draw(this.ctx);
@@ -230,23 +219,31 @@ class SymmetryGame {
     }
 
     drawStoredPaths(bassLevel, midLevel) {
-        // 発光設定（ネオン効果）
-        this.ctx.shadowBlur = 15 + (bassLevel / 10); // 音に合わせて光が強くなる
+        this.ctx.shadowBlur = 15 + (bassLevel / 10);
         
-        this.drawingHistory.forEach((stroke, index) => {
+        this.drawingHistory.forEach((stroke) => {
             const symmetryCount = stroke.symmetryCount;
             const angleStep = (2 * Math.PI) / symmetryCount;
             
-            // 色を音に合わせてシフトさせる
             const colorShift = Math.floor(midLevel / 30);
             const originalColorIndex = this.colors.indexOf(stroke.color);
             const dynamicColor = this.colors[(originalColorIndex + colorShift) % this.colors.length];
             
             this.ctx.strokeStyle = dynamicColor;
-            this.ctx.shadowColor = dynamicColor; // 光の色も合わせる
-            
-            // 音が大きいと線も太くなる
+            this.ctx.fillStyle = dynamicColor; // スプレー用
+            this.ctx.shadowColor = dynamicColor;
             this.ctx.lineWidth = stroke.size * (1 + bassLevel/300);
+
+            // スタイル適用
+            this.ctx.lineCap = stroke.style === 'ribbon' ? 'butt' : 'round';
+            if (stroke.style === 'ribbon') this.ctx.lineWidth = stroke.size * (1 + bassLevel/300) * 0.5;
+
+            // スプレーの場合はアニメーション中は点線のように描画して処理落ちを防ぐ
+            if (stroke.style === 'spray') {
+                this.ctx.setLineDash([1, stroke.size * 2]);
+            } else {
+                this.ctx.setLineDash([]);
+            }
 
             for (let i = 0; i < symmetryCount; i++) {
                 const angle = i * angleStep + this.baseRotation;
@@ -265,7 +262,7 @@ class SymmetryGame {
                     }
                     this.ctx.stroke();
 
-                    // ミラー描画
+                    // ミラー
                     if (symmetryCount > 2) {
                          this.ctx.beginPath();
                          let startRefX = this.centerX - (stroke.points[0].x - this.centerX);
@@ -281,11 +278,11 @@ class SymmetryGame {
             }
         });
         
-        // 設定リセット
         this.ctx.shadowBlur = 0;
+        this.ctx.setLineDash([]); // リセット
     }
 
-    // ▼▼▼ 以下、通常描画機能（大きな変更なし） ▼▼▼
+    // ▼▼▼ 描画ロジック（拡張版） ▼▼▼
     getMousePos(e) {
         const rect = this.canvas.getBoundingClientRect();
         return {
@@ -302,36 +299,100 @@ class SymmetryGame {
         const pos = this.getMousePos(e);
         this.lastX = pos.x;
         this.lastY = pos.y;
-        this.currentStrokePoints = [{x: pos.x, y: pos.y}];
+        this.startPos = { x: pos.x, y: pos.y }; // 多角形用
+        
+        if (this.drawTools[this.currentToolIndex] === 'freehand') {
+            this.currentStrokePoints = [{x: pos.x, y: pos.y}];
+            // クリックした瞬間も点を打つ
+            this.drawSymmetric(pos.x, pos.y, pos.x, pos.y);
+        } else {
+            // 多角形モード開始
+            this.currentStrokePoints = []; 
+        }
     }
     
     draw(e) {
         if (!this.isDrawing || this.isPlaying) return;
         const pos = this.getMousePos(e);
-        this.drawSymmetric(this.lastX, this.lastY, pos.x, pos.y);
-        this.currentStrokePoints.push({x: pos.x, y: pos.y});
-        this.lastX = pos.x;
-        this.lastY = pos.y;
+
+        if (this.drawTools[this.currentToolIndex] === 'freehand') {
+            // フリーハンド描画
+            this.drawSymmetric(this.lastX, this.lastY, pos.x, pos.y);
+            this.currentStrokePoints.push({x: pos.x, y: pos.y});
+            this.lastX = pos.x;
+            this.lastY = pos.y;
+            this.playDrawSound(pos.x, pos.y);
+        } else {
+            // 多角形プレビュー描画（一度消して再描画することでアニメーションさせる）
+            // 注意: 重くなりすぎないように履歴が多すぎる場合は制限が必要だが、今回は簡易実装
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.redrawHistory(); // 確定済みの線を描画
+            
+            // 現在の多角形プレビューを計算して描画
+            const polygonPoints = this.calculatePolygonPoints(this.startPos, pos);
+            this.drawSymmetricPolyPreview(polygonPoints);
+        }
+    }
+
+    // 正多角形の頂点を計算（中心は startPos, 半径はマウス距離）
+    calculatePolygonPoints(center, mousePos) {
+        const radius = Math.hypot(mousePos.x - center.x, mousePos.y - center.y);
+        const startAngle = Math.atan2(mousePos.y - center.y, mousePos.x - center.x);
+        const sides = this.symmetryModes[this.currentSymmetryIndex];
+        const points = [];
         
-        // 描画音（簡易的なビープ）
-        this.playDrawSound(pos.x, pos.y);
+        for (let i = 0; i <= sides; i++) { // 閉じるために一周する
+            const angle = startAngle + (i * 2 * Math.PI / sides);
+            points.push({
+                x: center.x + Math.cos(angle) * radius,
+                y: center.y + Math.sin(angle) * radius
+            });
+        }
+        return points;
     }
     
     playDrawSound(x, y) {
-        // 簡易オシレーター（連続すると重いので間引くなどの処理は省略）
-        // 実際の実装ではGainNodeの制御でスムーズにするのが良い
+        // 音声処理（省略）
     }
     
     stopDrawing() {
         if (!this.isDrawing) return;
         this.isDrawing = false;
-        if (this.currentStrokePoints.length > 1) {
-            this.drawingHistory.push({
-                points: this.currentStrokePoints,
-                color: this.colors[this.currentColorIndex],
-                size: this.brushSizes[this.currentSizeIndex],
-                symmetryCount: this.symmetryModes[this.currentSymmetryIndex]
-            });
+        
+        const currentTool = this.drawTools[this.currentToolIndex];
+        
+        if (currentTool === 'polygon') {
+            // マウスアップ時点で多角形を確定
+            // 最後のマウス位置を取得する必要があるが、mousemoveの最後の状態を使う
+            // 簡易的に：mousemoveが一度も発火してない場合は何もしない
+             // 多角形モードの場合、currentStrokePoints は空なので、ここで生成して保存する
+             // ただし、draw内で計算していないため、イベントオブジェクトがない...
+             // 修正: draw内で保存しておくか、ここでもう一度計算するか。
+             // 簡易ハック: 直前のプレビューが残っているので、それを確定させたいが、
+             // ここでは「startPos」と「lastX/Y」を使って計算し直す。
+             const points = this.calculatePolygonPoints(this.startPos, {x: this.lastX, y: this.lastY});
+             // 半径が小さすぎる場合は無視
+             if (Math.hypot(this.lastX - this.startPos.x, this.lastY - this.startPos.y) > 5) {
+                 this.drawingHistory.push({
+                    points: points,
+                    color: this.colors[this.currentColorIndex],
+                    size: this.brushSizes[this.currentSizeIndex],
+                    symmetryCount: this.symmetryModes[this.currentSymmetryIndex],
+                    style: this.brushStyles[this.currentStyleIndex] // スタイル保存
+                });
+             }
+             this.redrawHistory(); // プレビュー用の線を確定線として再描画
+        } else {
+            // フリーハンド
+            if (this.currentStrokePoints.length > 0) {
+                this.drawingHistory.push({
+                    points: this.currentStrokePoints,
+                    color: this.colors[this.currentColorIndex],
+                    size: this.brushSizes[this.currentSizeIndex],
+                    symmetryCount: this.symmetryModes[this.currentSymmetryIndex],
+                    style: this.brushStyles[this.currentStyleIndex] // スタイル保存
+                });
+            }
         }
         this.currentStrokePoints = [];
     }
@@ -348,18 +409,48 @@ class SymmetryGame {
         this.ctx.fillStyle = '#ffffff';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.drawingHistory.forEach(stroke => {
-            const symmetryCount = stroke.symmetryCount;
-            const angleStep = (2 * Math.PI) / symmetryCount;
-            this.ctx.strokeStyle = stroke.color;
-            this.ctx.lineWidth = stroke.size;
-            this.ctx.shadowBlur = 0; // 静止画では光らせない
+            this.renderStroke(stroke);
+        });
+    }
 
-            for (let i = 0; i < symmetryCount; i++) {
-                const angle = i * angleStep;
-                const cos = Math.cos(angle);
-                const sin = Math.sin(angle);
-                
-                const drawPath = (points, isRef) => {
+    // 保存されたストロークを描画する共通関数（静止画用）
+    renderStroke(stroke) {
+        const symmetryCount = stroke.symmetryCount;
+        const angleStep = (2 * Math.PI) / symmetryCount;
+        this.ctx.strokeStyle = stroke.color;
+        this.ctx.fillStyle = stroke.color; // スプレー用
+        this.ctx.lineWidth = stroke.size;
+        this.ctx.shadowBlur = 0;
+        
+        // ブラシスタイル設定
+        const style = stroke.style || 'neon'; // 古いデータ互換
+        this.ctx.lineCap = style === 'ribbon' ? 'butt' : 'round';
+        this.ctx.lineJoin = style === 'ribbon' ? 'bevel' : 'round';
+
+        for (let i = 0; i < symmetryCount; i++) {
+            const angle = i * angleStep;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            
+            const drawPath = (points, isRef) => {
+                if (style === 'spray') {
+                    // スプレー描画（点の集合として描画）
+                    points.forEach(pt => {
+                        let rx = pt.x - this.centerX;
+                        let ry = pt.y - this.centerY;
+                        if(isRef) rx = -rx;
+                        const finalX = rx * cos - ry * sin + this.centerX;
+                        const finalY = rx * sin + ry * cos + this.centerY;
+                        
+                        // 1ポイントにつき数個のドットを散らす
+                        for(let k=0; k<3; k++) {
+                            const offsetX = (Math.random() - 0.5) * stroke.size * 2;
+                            const offsetY = (Math.random() - 0.5) * stroke.size * 2;
+                            this.ctx.fillRect(finalX + offsetX, finalY + offsetY, 1, 1);
+                        }
+                    });
+                } else {
+                    // 通常線 or リボン
                     this.ctx.beginPath();
                     points.forEach((pt, idx) => {
                         let rx = pt.x - this.centerX;
@@ -371,48 +462,86 @@ class SymmetryGame {
                         else this.ctx.lineTo(finalX, finalY);
                     });
                     this.ctx.stroke();
-                };
-                drawPath(stroke.points, false);
-                if (symmetryCount > 2) drawPath(stroke.points, true);
-            }
-        });
+                }
+            };
+            drawPath(stroke.points, false);
+            if (symmetryCount > 2) drawPath(stroke.points, true);
+        }
     }
 
+    // フリーハンド描画時のリアルタイムレンダリング
     drawSymmetric(x1, y1, x2, y2) {
         const symmetryCount = this.symmetryModes[this.currentSymmetryIndex];
         const angleStep = (2 * Math.PI) / symmetryCount;
+        const style = this.brushStyles[this.currentStyleIndex];
+        const size = this.brushSizes[this.currentSizeIndex];
+
         this.ctx.strokeStyle = this.colors[this.currentColorIndex];
-        this.ctx.lineWidth = this.brushSizes[this.currentSizeIndex];
+        this.ctx.fillStyle = this.colors[this.currentColorIndex];
+        this.ctx.lineWidth = size;
+        this.ctx.lineCap = style === 'ribbon' ? 'butt' : 'round';
         
         for (let i = 0; i < symmetryCount; i++) {
             const angle = i * angleStep;
-            // 座標変換計算（省略せずに実装）
             const cos = Math.cos(angle), sin = Math.sin(angle);
-            const rotate = (x, y) => ({
-                x: (x - this.centerX) * cos - (y - this.centerY) * sin + this.centerX,
-                y: (x - this.centerX) * sin + (y - this.centerY) * cos + this.centerY
-            });
-            const p1 = rotate(x1, y1);
-            const p2 = rotate(x2, y2);
             
-            this.ctx.beginPath();
-            this.ctx.moveTo(p1.x, p1.y);
-            this.ctx.lineTo(p2.x, p2.y);
-            this.ctx.stroke();
-            
+            // 座標変換関数
+            const transform = (x, y, mirror) => {
+                let rx = x - this.centerX;
+                let ry = y - this.centerY;
+                if (mirror) rx = -rx;
+                return {
+                    x: rx * cos - ry * sin + this.centerX,
+                    y: rx * sin + ry * cos + this.centerY
+                };
+            };
+
+            const drawSegment = (p1, p2) => {
+                if (style === 'spray') {
+                    // スプレー: 線を引く代わりに点を散らす
+                    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                    const steps = Math.max(1, Math.floor(dist / 2));
+                    for (let s = 0; s < steps; s++) {
+                        const t = s / steps;
+                        const tx = p1.x + (p2.x - p1.x) * t;
+                        const ty = p1.y + (p2.y - p1.y) * t;
+                        
+                        for (let d = 0; d < 5; d++) { // 密度
+                            const r = Math.random() * size;
+                            const a = Math.random() * Math.PI * 2;
+                            this.ctx.fillRect(tx + Math.cos(a)*r, ty + Math.sin(a)*r, 1.5, 1.5);
+                        }
+                    }
+                } else {
+                    // 通常・リボン
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(p1.x, p1.y);
+                    this.ctx.lineTo(p2.x, p2.y);
+                    this.ctx.stroke();
+                }
+            };
+
+            // 通常描画
+            drawSegment(transform(x1, y1, false), transform(x2, y2, false));
+
+            // ミラー描画
             if (symmetryCount > 2) {
-                const refRotate = (x, y) => ({
-                    x: (x - this.centerX) * cos + (y - this.centerY) * sin + this.centerX,
-                    y: -(x - this.centerX) * sin + (y - this.centerY) * cos + this.centerY
-                });
-                const rp1 = refRotate(x1, y1);
-                const rp2 = refRotate(x2, y2);
-                this.ctx.beginPath();
-                this.ctx.moveTo(rp1.x, rp1.y);
-                this.ctx.lineTo(rp2.x, rp2.y);
-                this.ctx.stroke();
+                drawSegment(transform(x1, y1, true), transform(x2, y2, true));
             }
         }
+    }
+
+    // 多角形プレビュー用の描画（履歴に残す前の表示用）
+    drawSymmetricPolyPreview(points) {
+        // 現在の設定で仮のストロークデータを作成して renderStroke を使う
+        const tempStroke = {
+            points: points,
+            color: this.colors[this.currentColorIndex],
+            size: this.brushSizes[this.currentSizeIndex],
+            symmetryCount: this.symmetryModes[this.currentSymmetryIndex],
+            style: this.brushStyles[this.currentStyleIndex]
+        };
+        this.renderStroke(tempStroke);
     }
 
     changeColor() {
@@ -427,11 +556,25 @@ class SymmetryGame {
         this.currentSizeIndex = (this.currentSizeIndex + 1) % this.brushSizes.length;
         this.updateUI();
     }
+    // 新機能用UI更新
+    changeBrushStyle() {
+        this.currentStyleIndex = (this.currentStyleIndex + 1) % this.brushStyles.length;
+        this.updateUI();
+    }
+    changeDrawTool() {
+        this.currentToolIndex = (this.currentToolIndex + 1) % this.drawTools.length;
+        this.updateUI();
+    }
+    
     updateUI() {
         document.getElementById('currentColor').textContent = this.colorEmojis[this.currentColorIndex];
         document.getElementById('symmetryCount').textContent = this.symmetryModes[this.currentSymmetryIndex];
         document.getElementById('modeBtn').textContent = `対称モード: ${this.symmetryModes[this.currentSymmetryIndex]}方向`;
         document.getElementById('sizeBtn').textContent = `筆のサイズ: ${this.brushSizeNames[this.currentSizeIndex]}`;
+        
+        // 新しいボタンの表示更新
+        document.getElementById('styleBtn').textContent = `ペン: ${this.brushStyleNames[this.currentStyleIndex]}`;
+        document.getElementById('toolBtn').textContent = `ツール: ${this.drawToolNames[this.currentToolIndex]}`;
     }
 }
 
