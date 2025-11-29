@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>対称ゲーム - 美しい対称を描こう</title>
+    <title>対称ゲーム - Neon Ignite Mode</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="game-container">
-        <h1>対称ゲーム</h1>
-        <p class="instruction">画面をタッチして美しい対称模様を描こう！</p>
+        <h1>対称ゲーム：Neon Ignite</h1>
+        <p class="instruction">描いた模様が音楽のエネルギーに合わせて発光・変形します！<br>再生ボタンを押してビートを感じてください。</p>
         
         <div class="controls">
             <button id="clearBtn">クリア</button>
             <button id="colorBtn">色を変える</button>
             <button id="modeBtn">対称モード: 2方向</button>
             <button id="sizeBtn">筆のサイズ: 中</button>
-        </div>
+            <button id="playBtn" class="play-btn">▶ MUSIC START</button>
+            </div>
         
         <div class="canvas-container">
             <canvas id="gameCanvas"></canvas>
@@ -26,7 +27,9 @@
             <p>現在の色: <span id="currentColor">🔴</span></p>
             <p>対称数: <span id="symmetryCount">2</span></p>
         </div>
-    </div>
+
+        <audio id="bgm" src="Neon Hearts Ignite.mp3" loop></audio>
+        </div>
 
     <script src="script.js"></script>
 </body>
